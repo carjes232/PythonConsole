@@ -1,28 +1,21 @@
 import os
 import subprocess
+import platform
 
-# Define paths and parameters
+# --- Configuration ---
 script_name = 'main.py'
 executable_name = 'TerminalIF'
-icon_path = './icon.ico'
-spec_file_name = 'TerminalIF.spec'
-python_version = '3.10'
+# On Linux it is common to use a PNG icon.
+# (If you only have an ICO file, consider converting it to PNG.)
+icon_path = './icon.png'
+spec_file_name = f'{executable_name}.spec'
+python_version = f"{platform.python_version_tuple()[0]}.{platform.python_version_tuple()[1]}"
 virtual_env_path = './.venv'
 
-# Step 1: Create the spec file using PyInstaller
-subprocess.run([
-    f"{virtual_env_path}/bin/pyinstaller", 
-    '--onefile', 
-    '--windowed', 
-    f'--name={executable_name}', 
-    f'--icon={icon_path}', 
-    script_name
-])
-
-# Step 2: Manually create the spec file with necessary imports and data
-spec_content = f"""
+# --- Build the Spec File for Linux ---
+if platform.system() == "Linux":
+    spec_content = f"""
 # -*- mode: python ; coding: utf-8 -*-
-
 block_cipher = None
 
 a = Analysis(
@@ -30,9 +23,9 @@ a = Analysis(
     pathex=['.'],
     binaries=[],
     datas=[
+        # Include necessary data files for matplotlib and PIL
         ('./.venv/lib/python{python_version}/site-packages/PIL', 'PIL'),
         ('./.venv/lib/python{python_version}/site-packages/matplotlib/mpl-data', 'mpl-data'),
-        ('/usr/lib/python{python_version}/tkinter', 'tkinter')
     ],
     hiddenimports=['PIL._tkinter_finder', 'tkinter', 'matplotlib.backends.backend_tkagg', 'PIL.ImageTk', '_tkinter', 'serial'],
     hookspath=[],
@@ -42,9 +35,7 @@ a = Analysis(
     win_private_assemblies=False,
     cipher=block_cipher,
 )
-
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
-
 exe = EXE(
     pyz,
     a.scripts,
@@ -60,7 +51,6 @@ exe = EXE(
     console=False,
     icon='{icon_path}',
 )
-
 coll = COLLECT(
     exe,
     a.binaries,
@@ -72,18 +62,73 @@ coll = COLLECT(
     name='{executable_name}',
 )
 """
+else:
+    # For Windows (or other OS), you can adapt the spec file accordingly.
+    spec_content = f"""
+# -*- mode: python ; coding: utf-8 -*-
+block_cipher = None
 
+a = Analysis(
+    ['{script_name}'],
+    pathex=['.'],
+    binaries=[],
+    datas=[
+        ('./.venv/Lib/site-packages/PIL', 'PIL'),
+        ('./.venv/Lib/site-packages/matplotlib/mpl-data', 'mpl-data'),
+    ],
+    hiddenimports=['PIL._tkinter_finder', 'tkinter', 'matplotlib.backends.backend_tkagg', 'PIL.ImageTk', '_tkinter', 'serial'],
+    hookspath=[],
+    runtime_hooks=[],
+    excludes=[],
+    win_no_prefer_redirects=False,
+    win_private_assemblies=False,
+    cipher=block_cipher,
+)
+pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+exe = EXE(
+    pyz,
+    a.scripts,
+    [],
+    exclude_binaries=True,
+    name='{executable_name}',
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    runtime_tmpdir=None,
+    console=False,
+    icon='{icon_path}',
+)
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    name='{executable_name}',
+)
+"""
+    
 # Write the spec content to the spec file
 with open(spec_file_name, 'w') as file:
     file.write(spec_content)
 
-# Step 3: Run PyInstaller with the modified spec file
+# Step 1: Create the executable using PyInstaller and the generated spec file
 subprocess.run([
     f"{virtual_env_path}/bin/pyinstaller", 
-    spec_file_name
+    '--onefile', 
+    '--windowed', 
+    f'--name={executable_name}', 
+    f'--icon={icon_path}', 
+    script_name
 ])
 
-# Step 4: Create the install.sh script
+
+# Step 2: Create an install script (install.sh) that copies the executable and icon,
+# and creates a desktop entry for Linux.
 install_script = f"""#!/bin/bash
 
 # Copy the executable to /usr/local/bin
@@ -93,7 +138,7 @@ sudo cp ./dist/{executable_name} /usr/local/bin/{executable_name}
 sudo cp {icon_path} /usr/share/pixmaps/{executable_name}.png
 
 # Create the desktop entry
-cat <<EOF | sudo tee /usr/share/applications/{executable_name}.desktop
+sudo tee /usr/share/applications/{executable_name}.desktop > /dev/null <<EOF
 [Desktop Entry]
 Version=1.0
 Name=TerminalIF
